@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Carrel · Dashboard</title>
+<link rel="stylesheet" href="assets/css/styles.css">
+<style>
+  .dash{max-width:900px;padding:20px 0 60px}
+  .dash h1{font-size:24px;margin:8px 0 4px}
+  .muted{color:var(--violet);font-size:13px;margin-bottom:18px}
+  .io{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .io input[type=number]{width:90px;padding:6px 8px;border:2px solid #d9c8a8;border-radius:8px;font-size:14px}
+  .io label{font-size:13px;color:var(--violet2);display:flex;gap:6px;align-items:center}
+  textarea{width:100%;min-height:90px;border:2px solid #d9c8a8;border-radius:10px;padding:10px;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  button.go{background:var(--amber);border:none;border-radius:10px;padding:9px 16px;font-weight:800;cursor:pointer}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+  @media(max-width:640px){.grid{grid-template-columns:1fr}}
+  .panel{background:#fff8ec;border:2px solid #e7dcc7;border-radius:14px;padding:16px}
+  .panel h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--violet);margin-bottom:10px}
+  .funnel .step{display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-bottom:1px dashed #e0d4bd}
+  .rate{font-size:40px;font-weight:800;letter-spacing:-1px;margin:6px 0}
+  .rate small{font-size:14px;color:var(--violet);font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:5px 6px;border-bottom:1px solid #eadfc9}
+  th{color:var(--violet);font-weight:700}
+  .tag{display:inline-block;font-weight:800;padding:2px 8px;border-radius:6px;background:#ece0c8}
+  .badgeA{background:#e8d3f0}.badgeB{background:#cfe8dd}
+</style>
+</head>
+<body>
+  <main class="wrap dash">
+    <h1>Carrel — Pretotype Dashboard</h1>
+    <p class="muted">Lokale Auswertung exportierter Events. Die <strong>Live-Quelle ist Plausible</strong>;
+      QR-Scans (Nenner) kommen aus dem Redirect-Dienst und werden hier manuell eingetragen.</p>
+
+    <div class="io">
+      <label>Scans A <input type="number" id="scanA" min="0" value="0"></label>
+      <label>Scans B <input type="number" id="scanB" min="0" value="0"></label>
+      <input type="file" id="file" accept=".json,.ndjson,.txt">
+      <button class="go" id="run">Auswerten</button>
+    </div>
+    <textarea id="paste" placeholder="…oder Events hier einfügen: JSON-Array oder eine JSON-Zeile pro Event (aus window.__events oder dem sendBeacon-Log)."></textarea>
+
+    <div class="grid" id="out"></div>
+  </main>
+
+<script>
+function parseEvents(txt){
+  txt=(txt||"").trim(); if(!txt) return [];
+  try{ var j=JSON.parse(txt); return Array.isArray(j)?j:[j]; }catch(e){}
+  return txt.split(/\r?\n/).map(function(l){l=l.trim();if(!l)return null;try{return JSON.parse(l);}catch(e){return null;}}).filter(Boolean);
+}
+function pct(n,d){ return d>0? (100*n/d):0; }
+function count(evs,f){ return evs.filter(f).length; }
+function byVariant(evs,v){ return evs.filter(function(e){return e.variant===v;}); }
+
+function panel(v, evs, scans){
+  var cls = v==="a"?"badgeA":(v==="b"?"badgeB":"");
+  var views=count(evs,function(e){return e.event==="page_view";});
+  var taps =count(evs,function(e){return e.event==="download_tap";});
+  var mails=count(evs,function(e){return e.event==="email_submit";});
+  var rate=pct(taps,views);
+  // OS split of taps (platform viability) + button split (what was clicked)
+  var osK={ios:0,android:0,other:0}, btnK={ios:0,android:0};
+  evs.forEach(function(e){ if(e.event==="download_tap"){ if(osK[e.os]!=null)osK[e.os]++; if(btnK[e.button]!=null)btnK[e.button]++; }});
+  // daily
+  var days={};
+  evs.forEach(function(e){ if(e.event==="page_view"||e.event==="download_tap"){ var d=(e.ts||"").slice(0,10)||"—"; days[d]=days[d]||{v:0,t:0}; if(e.event==="page_view")days[d].v++; else days[d].t++; }});
+  var drows=Object.keys(days).sort().map(function(d){return "<tr><td>"+d+"</td><td>"+days[d].v+"</td><td>"+days[d].t+"</td></tr>";}).join("")||"<tr><td>—</td><td>0</td><td>0</td></tr>";
+
+  return '<div class="panel"><h2><span class="tag '+cls+'">Variante '+v.toUpperCase()+'</span></h2>'+
+    '<div class="rate">'+rate.toFixed(1)+'%<small> Tap-Rate (Taps ÷ Views)</small></div>'+
+    '<div class="funnel">'+
+      '<div class="step"><span>QR-Scans</span><b>'+scans+'</b></div>'+
+      '<div class="step"><span>Seitenaufrufe</span><b>'+views+'</b></div>'+
+      '<div class="step"><span>Download-Taps ★</span><b>'+taps+'</b></div>'+
+      '<div class="step"><span>E-Mails</span><b>'+mails+'</b></div>'+
+    '</div>'+
+    '<h2 style="margin-top:14px">Taps nach OS</h2>'+
+    '<table><tr><th>iOS</th><th>Android</th><th>Andere</th></tr>'+
+      '<tr><td>'+osK.ios+'</td><td>'+osK.android+'</td><td>'+osK.other+'</td></tr></table>'+
+    '<h2 style="margin-top:14px">Getippter Button</h2>'+
+    '<table><tr><th>App Store</th><th>Google Play</th></tr><tr><td>'+btnK.ios+'</td><td>'+btnK.android+'</td></tr></table>'+
+    '<h2 style="margin-top:14px">Täglich (Views / Taps)</h2>'+
+    '<table><tr><th>Tag</th><th>Views</th><th>Taps</th></tr>'+drows+'</table>'+
+  '</div>';
+}
+function scanUnknown(evs){ return count(byVariant(evs,"unknown"),function(e){return e.event==="page_view";}); }
+function run(){
+  var evs=parseEvents(document.getElementById("paste").value);
+  var sA=+document.getElementById("scanA").value||0, sB=+document.getElementById("scanB").value||0;
+  var out=document.getElementById("out");
+  var unk=scanUnknown(evs);
+  out.innerHTML = panel("a",byVariant(evs,"a"),sA)+panel("b",byVariant(evs,"b"),sB)+
+    (unk? '<div class="panel" style="grid-column:1/-1"><h2>Nicht attribuiert</h2><p style="font-size:13px;color:var(--violet2)">'+unk+' Seitenaufrufe mit <b>variant=unknown</b> (fehlerhafter/fehlender QR-Parameter) — vom A/B-Vergleich ausgeschlossen.</p></div>':"");
+}
+document.getElementById("run").addEventListener("click",run);
+document.getElementById("file").addEventListener("change",function(e){
+  var f=e.target.files[0]; if(!f)return; var r=new FileReader();
+  r.onload=function(){ document.getElementById("paste").value=r.result; run(); }; r.readAsText(f);
+});
+run();
+</script>
+</body>
+</html>

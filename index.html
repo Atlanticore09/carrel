@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Carrel — deine Bibliothek, smarter. Bald verfügbar.">
+<meta name="robots" content="noindex"><!-- pretotype: keep out of search -->
+<title>Carrel</title>
+<link rel="icon" href="assets/img/logo.png">
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <img id="logo" class="pixel" src="assets/img/logo.png" alt="">
+      <span class="name" id="appName">Carrel</span>
+      <span class="tag">Bald verfügbar</span>
+    </header>
+
+    <section class="hero">
+      <img id="hero-art" class="art pixel" src="assets/img/hero-a.png" alt="">
+      <h1 id="headline">&nbsp;</h1>
+      <p class="sub" id="sub">&nbsp;</p>
+    </section>
+
+    <section class="benefits" id="benefits" aria-label="Vorteile"></section>
+
+    <section class="shots">
+      <h2>So funktioniert's</h2>
+      <div class="phones" id="phones"></div>
+    </section>
+
+    <section class="dl">
+      <h2 id="dlHeading">Jetzt vormerken</h2>
+      <div class="badges">
+        <button class="badge" data-store="ios" type="button" aria-label="Download im App Store">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.4 12.7c0-2 1.6-2.9 1.7-3-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7-.6 0-1.6-.7-2.6-.7-1.3 0-2.6.8-3.3 2-1.4 2.4-.4 6 1 8 .7 1 1.4 2 2.4 2 1 0 1.3-.6 2.5-.6s1.5.6 2.5.6 1.7-1 2.3-2c.7-1.1 1-2.2 1-2.3-.1 0-2-.8-2-3.1zM14.6 6.3c.5-.7.9-1.6.8-2.5-.8 0-1.7.5-2.3 1.2-.5.6-.9 1.5-.8 2.4.9 0 1.8-.4 2.3-1.1z"/></svg>
+          <span class="t"><small>Download im</small><b>App Store</b></span>
+        </button>
+        <button class="badge" data-store="android" type="button" aria-label="Bei Google Play">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.6 2.3c-.3.2-.5.6-.5 1.1v17.2c0 .5.2.9.5 1.1l.1.1L13 12.5v-.2L3.7 2.2l-.1.1zm12.1 13.5-2.3-2.3v-.2l2.3-2.3.1.1 2.7 1.6c.8.4.8 1.2 0 1.7l-2.8 1.4zM14 12.5l2.4 2.4-9 5.1c-.5.3-1 .3-1.4 0l8-7.5zm0-.2-8-7.5c.4-.3.9-.3 1.4 0l9 5.1L14 12.3z"/></svg>
+          <span class="t"><small>Jetzt bei</small><b>Google Play</b></span>
+        </button>
+      </div>
+      <p class="note">Kostenlos zum Semesterstart.</p>
+    </section>
+
+    <section class="reveal" id="reveal" hidden aria-live="polite">
+      <h2 id="revealHead">&nbsp;</h2>
+      <p class="body" id="revealBody">&nbsp;</p>
+      <form class="form" id="form" novalidate>
+        <input type="email" id="email" name="email" inputmode="email" autocomplete="email" required placeholder="deine@uni-mail.de">
+        <label class="optin"><input type="checkbox" id="optin" name="optin"><span id="optinLabel"></span></label>
+        <div class="err" id="emailErr" role="alert"></div>
+        <button type="submit" id="emailBtn">Benachrichtige mich</button>
+      </form>
+      <div class="thanks" id="thanks"></div>
+    </section>
+
+    <footer>
+      <p class="disc" id="disc">&nbsp;</p>
+      <p class="links"><a href="impressum.html">Impressum</a><a href="datenschutz.html">Datenschutz</a></p>
+    </footer>
+  </div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
