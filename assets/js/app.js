@@ -1,195 +1,232 @@
-/* Carrel landing logic: variant attribution, event tracking, reveal, email. */
+/* Carrel landing logic — variant attribution, download counter, reveal, email. */
 (function () {
   "use strict";
-  var CFG = window.CARREL_CONFIG;
-  // A config value counts as "live" once it's no longer the REPLACE placeholder.
-  function isSet(v) { return typeof v === "string" && v && v.indexOf("REPLACE") === -1; }
+  var CFG = window.CARREL_CONFIG, S = CFG.shared;
+  function isSet(v){ return typeof v === "string" && v && v.indexOf("REPLACE") === -1; }
 
-  /* ---------- variant (never silently default to A) ---------------------- */
+  /* ---- variant (never silently default to A) ---------------------------- */
   var raw = new URLSearchParams(location.search).get("v");
   var v = (raw === "a" || raw === "b") ? raw : null;
-  var analyticsVariant = v || "unknown";      // what we TAG events with
-  var renderKey = v || "a";                    // what we SHOW (fallback visual only)
-  var V = CFG.variants[renderKey];
+  var analyticsVariant = v || "unknown";
+  var V = CFG.variants[v || "a"];
 
-  /* ---------- OS detection (separate fact from button tapped) ------------ */
-  function detectOS() {
+  /* ---- OS detection (separate fact from the button tapped) -------------- */
+  function detectOS(){
     var ua = navigator.userAgent || "";
     if (/android/i.test(ua)) return "android";
     if (/iphone|ipad|ipod/i.test(ua)) return "ios";
-    if (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1) return "ios"; // iPadOS
+    if (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1) return "ios";
     return "other";
   }
   var OS = detectOS();
 
-  /* ---------- session-scoped dedup (no cookies, no cross-session id) ------ */
-  var mem = {};
-  function once(key) {
-    var k = "carrel_" + key;
-    try { if (sessionStorage.getItem(k)) return false; sessionStorage.setItem(k, "1"); return true; }
-    catch (e) { if (mem[k]) return false; mem[k] = 1; return true; }
-  }
+  /* ---- session dedup (no cookies, no cross-session id) ------------------ */
+  var mem = {}, lastFocus = null;
+  function once(k){ k="carrel_"+k; try{ if(sessionStorage.getItem(k))return false; sessionStorage.setItem(k,"1"); return true; }catch(e){ if(mem[k])return false; mem[k]=1; return true; } }
 
-  /* ---------- event tracking --------------------------------------------- */
+  /* ---- tracking --------------------------------------------------------- */
   window.__events = window.__events || [];
-  function track(name, props) {
-    var payload = Object.assign({ event: name, variant: analyticsVariant, os: OS, ts: new Date().toISOString() }, props || {});
-    window.__events.push(payload);
-    // Visible in console for verification and local capture.
-    try { console.log("[carrel-event] " + JSON.stringify(payload)); } catch (e) {}
-    // Plausible (cookieless). Manual pageview so the denominator carries variant.
-    if (isSet(CFG.analytics.plausibleDomain) && typeof window.plausible === "function") {
-      if (name === "page_view") window.plausible("pageview", { props: props });
-      else window.plausible(name, { props: props });
+  function track(name, props){
+    var p = Object.assign({event:name, variant:analyticsVariant, os:OS, ts:new Date().toISOString()}, props||{});
+    window.__events.push(p);
+    try{ console.log("[carrel-event] "+JSON.stringify(p)); }catch(e){}
+    if (isSet(CFG.analytics.plausibleDomain) && typeof window.plausible === "function"){
+      var pp = Object.assign({variant:analyticsVariant, os:OS}, props||{});
+      if (name === "page_view") window.plausible("pageview", {props:pp});
+      else window.plausible(name, {props:pp});
     }
   }
-
-  /* ---------- rendering (structure identical; only content swaps) --------- */
-  function el(id) { return document.getElementById(id); }
-  function gaugeSVG(pct, cls) {
-    var hot = pct >= 66, col = hot ? "#C4453F" : (pct >= 40 ? "#E8A44C" : "#3A6B5C");
-    return '<svg viewBox="0 0 120 66" class="' + (cls || "") + '" aria-hidden="true">' +
-      '<path d="M8 60 A52 52 0 0 1 112 60" fill="none" stroke="rgba(255,255,255,.14)" stroke-width="10" stroke-linecap="round" pathLength="100"/>' +
-      '<path d="M8 60 A52 52 0 0 1 112 60" fill="none" stroke="' + col + '" stroke-width="10" stroke-linecap="round" pathLength="100" stroke-dasharray="' + pct + ' 100"/>' +
-      '</svg>';
+  function loadPlausible(){
+    if(!isSet(CFG.analytics.plausibleDomain)) return;
+    window.plausible = window.plausible || function(){ (window.plausible.q=window.plausible.q||[]).push(arguments); };
+    var s=document.createElement("script"); s.defer=true; s.src=CFG.analytics.plausibleSrc;
+    s.setAttribute("data-domain", CFG.analytics.plausibleDomain); document.head.appendChild(s);
   }
-  function spr(src) { return '<img class="spr pixel" src="' + src + '" alt="">'; }
 
-  var SCREENS = {
-    checkin: function () {
-      return screenShell(
-        '<div class="card"><div class="row"><div class="chk">✓</div>' +
-        '<div><div class="lbl">Eingecheckt · Philologicum</div><div style="font-weight:700">seit 13:42</div></div></div></div>' +
-        '<div class="card"><div class="lbl">Heute</div><div class="big">2h 14m</div>' +
-        '<div class="row" style="margin-top:6px">' + spr("assets/img/ic-clock.png") +
-        '<span style="font-size:12px;color:#b6a9c9">Läuft automatisch weiter</span></div></div>');
-    },
-    week: function () {
-      var days = ["M", "D", "M", "D", "F", "S", "S"], h = [60, 80, 45, 95, 70, 30, 20];
-      var bars = h.map(function (x, i) { return '<i class="' + (i > 4 ? "q" : "") + '" style="height:' + x + '%"></i>'; }).join("");
-      var lbls = days.map(function (d) { return '<span style="flex:1;text-align:center;font-size:10px;color:#b6a9c9">' + d + '</span>'; }).join("");
-      return screenShell(
-        '<div class="card"><div class="lbl">Diese Woche</div><div class="big">11h 30m</div>' +
-        '<div class="bars">' + bars + '</div><div class="row" style="margin-top:4px">' + lbls + '</div></div>');
-    },
-    occupancy: function () {
-      return screenShell(
-        '<div class="card gauge">' + gaugeSVG(72) +
-        '<div class="g-val">72%</div><span class="pill full">ziemlich voll</span></div>' +
-        '<div class="card"><div class="lbl">Bester Zeitpunkt heute</div><div style="font-weight:700;margin-top:2px">nach 18:00 Uhr</div></div>');
-    },
-    floors: function () {
-      var f = [["EG", 40, "12 frei"], ["1. OG", 88, "2 frei"], ["2. OG", 62, "8 frei"], ["3. OG", 25, "19 frei"]];
-      var rows = f.map(function (r) {
-        return '<div class="floor"><span style="min-width:42px">' + r[0] + '</span>' +
-          '<span class="meter"><span class="' + (r[1] >= 80 ? "hot" : "") + '" style="width:' + r[1] + '%"></span></span>' +
-          '<span class="n">' + r[2] + '</span></div>';
-      }).join("");
-      return screenShell('<div class="card"><div class="lbl">Freie Plätze je Ebene</div>' +
-        '<div style="display:flex;flex-direction:column;gap:11px;margin-top:10px">' + rows + '</div></div>');
-    }
+  /* ---- icons ------------------------------------------------------------ */
+  var IMG = {
+    "ic-entry":"ic-entry.png","ic-chart":"ic-chart.png","ic-gear":"ic-gear.png",
+    "ic-floors":"ic-floors.png","ic-cap":"ic-cap.png","geofence":"ic-geofence.png",
+    "entry":"ic-entry.png","chart":"ic-chart.png","heatmap":"ic-heatmap.png",
+    "trophy":"ic-trophy.png","friends":"ic-friends.png"
   };
-  function screenShell(inner) {
-    return '<div class="screen"><div class="sbar"><span class="app">' + CFG.appName +
-      '</span><span>9:41</span></div><div class="body">' + inner + '</div></div>';
+  function gaugeSVG(pct,cls){
+    var col = pct>=66?"#E8756E":(pct>=40?"#E8A44C":"#5FBE97");
+    return '<svg viewBox="0 0 120 66" class="'+(cls||"")+'" aria-hidden="true">'
+      +'<path d="M8 60 A52 52 0 0 1 112 60" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="10" stroke-linecap="round" pathLength="100"/>'
+      +'<path d="M8 60 A52 52 0 0 1 112 60" fill="none" stroke="'+col+'" stroke-width="10" stroke-linecap="round" pathLength="100" stroke-dasharray="'+pct+' 100"/></svg>';
+  }
+  function iconHTML(key){
+    if(key==="gauge") return gaugeSVG(72,"ic-gauge");
+    return '<img class="pixel" src="assets/img/'+(IMG[key]||"ic-chart.png")+'" alt="">';
   }
 
-  function render() {
-    document.documentElement.lang = "de";
-    el("appName").textContent = CFG.appName;
-    el("logo").src = "assets/img/logo.png";
-    el("hero-art").src = V.hero;
-    el("hero-art").alt = CFG.appName;
-    el("headline").textContent = V.headline;
-    el("sub").textContent = V.sub;
+  /* ---- store badges (official-style, both platforms) -------------------- */
+  var APPLE='<svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M17.05 12.5c-.02-2 1.63-2.96 1.7-3-.93-1.36-2.38-1.55-2.9-1.57-1.23-.12-2.4.72-3.03.72-.62 0-1.58-.7-2.6-.68-1.34.02-2.57.78-3.26 1.98-1.39 2.41-.36 5.98 1 7.94.66.96 1.45 2.03 2.48 1.99 1-.04 1.37-.64 2.58-.64 1.2 0 1.54.64 2.6.62 1.07-.02 1.75-.98 2.4-1.94.76-1.11 1.07-2.18 1.09-2.24-.02-.01-2.09-.8-2.11-3.18zM15.1 6.9c.55-.66.92-1.59.82-2.5-.79.03-1.75.53-2.32 1.19-.51.58-.96 1.51-.84 2.4.88.07 1.79-.44 2.34-1.09z"/></svg>';
+  var PLAY='<svg class="glyph" viewBox="0 0 22 24" aria-hidden="true">'
+    +'<path fill="#EA4335" d="M2.7 1.4 13.9 8 11.4 10.5 2.7 1.4z"/>'
+    +'<path fill="#4285F4" d="M2.4 1.6C2.2 1.8 2.1 2.1 2.1 2.6v18.8c0 .5.1.8.3 1L12 12 2.4 1.6z"/>'
+    +'<path fill="#34A853" d="M2.7 22.6 11.4 13.5 13.9 16 2.7 22.6z"/>'
+    +'<path fill="#FBBC04" d="M13.9 8 18.9 10.9c1 .6 1 1.6 0 2.2L13.9 16 11.1 12 13.9 8z"/></svg>';
+  function badgesHTML(){
+    return '<button class="badge" data-store="ios" type="button" aria-label="Im App Store laden">'+APPLE
+      +'<span class="txt"><small>Laden im</small><b>App&nbsp;Store</b></span></button>'
+      +'<button class="badge" data-store="android" type="button" aria-label="Bei Google Play">'+PLAY
+      +'<span class="txt"><small>Jetzt bei</small><b>Google&nbsp;Play</b></span></button>';
+  }
 
-    el("benefits").innerHTML = V.benefits.map(function (b) {
-      var icon = /\.png$/.test(b.icon)
-        ? '<img src="' + b.icon + '" alt="">'
-        : gaugeSVG(72, "ic-gauge"); // ic-gauge placeholder → inline svg
-      return '<div class="benefit"><span class="ic">' + icon + '</span><p>' + b.text + '</p></div>';
+  function el(id){ return document.getElementById(id); }
+  function set(id,txt){ var e=el(id); if(e) e.textContent=txt; }
+
+  /* ---- render ----------------------------------------------------------- */
+  function render(){
+    document.documentElement.lang="de";
+    set("appName", CFG.appName);
+    el("logo").src="assets/img/logo.png";
+
+    // hero
+    el("hero-bg-img").src="assets/img/philo-hero.png";
+    set("headline", V.headline);
+    set("sub", V.sub);
+    set("everylib", S.everyLibrary);
+    set("dlnote", S.downloadNote);
+    el("owl").src="assets/img/owl-anim.png";
+
+    // variant benefits
+    el("benefits").innerHTML = V.benefits.map(function(b){
+      return '<div class="benefit reveal-up"><span class="ic">'+iconHTML(b.icon)+'</span><p>'+b.text+'</p></div>';
     }).join("");
 
-    el("phones").innerHTML = V.screens.map(function (s) { return '<div class="phone">' + SCREENS[s]() + "</div>"; }).join("");
+    // how it works
+    set("howHead", S.how.heading); set("howSub", S.how.sub);
+    el("howSteps").innerHTML = S.how.steps.map(function(s,i){
+      return '<div class="step reveal-up"><span class="n">'+(i+1)+'</span>'+iconHTML(s.icon).replace('class="pixel"','class="pixel" style="width:48px;height:48px"')
+        +'<h3>'+s.title+'</h3><p>'+s.text+'</p></div>';
+    }).join("");
 
-    el("dlHeading").textContent = CFG.shared.downloadHeading;
-    el("revealHead").textContent = CFG.shared.reveal.headline;
-    el("revealBody").textContent = CFG.shared.reveal.body;
-    el("email").placeholder = CFG.shared.emailPlaceholder;
-    el("optinLabel").textContent = CFG.shared.optin;
-    el("emailBtn").textContent = CFG.shared.emailButton;
-    el("thanks").textContent = CFG.shared.thanks;
-    el("disc").textContent = CFG.shared.footerDisclaimer;
+    // features
+    set("featHead", S.features.heading); set("featSub", S.features.sub);
+    el("featGrid").innerHTML = S.features.items.map(function(f){
+      return '<div class="feature reveal-up">'+iconHTML(f.icon).replace('class="pixel"','class="pixel" style="width:38px;height:38px"')
+        +'<h3>'+f.title+'</h3><p>'+f.text+'</p></div>';
+    }).join("");
+    buildHeatmap();
+
+    // faq
+    set("faqHead", S.faq.heading);
+    el("faqList").innerHTML = S.faq.items.map(function(x,i){
+      return '<div class="qa"><button type="button" aria-expanded="false" aria-controls="a'+i+'">'
+        +'<span>'+x.q+'</span><span class="plus" aria-hidden="true">+</span></button>'
+        +'<div class="a" id="a'+i+'" role="region"><p>'+x.a+'</p></div></div>';
+    }).join("");
+
+    // cta + reveal + footer
+    set("ctaHead", S.downloadHeading);
+    set("ctaTag", S.tagline);
+    set("revealHead", S.reveal.headline);
+    set("revealBody", S.reveal.body);
+    el("m-owl").src="assets/img/owl-anim.png";
+    el("email").placeholder=S.emailPlaceholder;
+    set("optinLabel", S.optin);
+    set("emailBtn", S.emailButton);
+    set("thanks", S.thanks);
+    set("disc", S.footerDisclaimer);
+
+    // inject store badges everywhere
+    Array.prototype.forEach.call(document.querySelectorAll(".badges"), function(c){ c.innerHTML=badgesHTML(); });
   }
 
-  /* ---------- interactions ----------------------------------------------- */
-  function onDownload(btn) {
-    var button = btn.getAttribute("data-store"); // ios | android
-    // Fire the PRIMARY metric before anything changes the view.
-    if (once("dl_" + button)) track("download_tap", { button: button, os: OS, variant: analyticsVariant });
-    var reveal = el("reveal");
-    reveal.hidden = false;
-    // Short delay so the beacon/plausible call is dispatched before scroll/paint.
-    setTimeout(function () { reveal.scrollIntoView({ behavior: "smooth", block: "start" }); }, 150);
+  function buildHeatmap(){
+    var g=el("hmGrid"); if(!g) return;
+    var cols=20, rows=5, cells="";
+    // deterministic pattern: denser toward "recent" (right)
+    for(var r=0;r<rows;r++) for(var c=0;c<cols;c++){
+      var seed=(c*7+r*13)%11, lvl = seed>8?4:seed>6?3:seed>4?2:seed>2?1:0;
+      if(c>15 && seed>3) lvl=Math.min(4,lvl+1);
+      var cls = lvl?" l"+lvl:"";
+      cells+='<i class="'+cls.trim()+'" style="animation-delay:'+((c+r)*18)+'ms"></i>';
+    }
+    g.innerHTML=cells;
   }
 
-  function onSubmit(e) {
+  /* ---- interactions ----------------------------------------------------- */
+  function onStore(btn){
+    var button=btn.getAttribute("data-store");
+    if(once("dl_"+button)) track("download_tap", {button:button, os:OS, variant:analyticsVariant});
+    openModal();
+  }
+  function openModal(){
+    lastFocus=document.activeElement; var m=el("modal"); m.classList.add("open"); m.setAttribute("aria-hidden","false");
+    setTimeout(function(){ var f=el("email"), x=m.querySelector("[data-close]"); var t=(f&&f.offsetParent!==null)?f:x; if(t){ try{t.focus();}catch(e){} } },40);
+  }
+  function closeModal(){ var m=el("modal"); m.classList.remove("open"); m.setAttribute("aria-hidden","true"); if(lastFocus&&lastFocus.focus){ try{lastFocus.focus();}catch(e){} } }
+
+  function onSubmit(e){
     e.preventDefault();
-    var email = el("email"), optin = el("optin"), err = el("emailErr");
-    if (!email.value || !email.checkValidity()) { err.textContent = "Bitte gib eine gültige E-Mail-Adresse ein."; err.style.display = "block"; return; }
-    if (!optin.checked) { err.textContent = "Bitte bestätige die Benachrichtigung."; err.style.display = "block"; return; }
-    err.style.display = "none";
-    function done() {
-      if (once("em")) track("email_submit", { variant: analyticsVariant, os: OS });
-      el("form").style.display = "none";
-      el("thanks").style.display = "block";
-    }
-    if (isSet(CFG.formspree.endpoint)) {
-      var fd = new FormData();
-      fd.append("email", email.value);
-      fd.append("variant", analyticsVariant);
-      fd.append("os", OS);
-      fd.append("_subject", "Carrel launch-notify (" + analyticsVariant + ")");
-      fetch(CFG.formspree.endpoint, { method: "POST", body: fd, headers: { Accept: "application/json" } })
-        .then(function (r) { if (r.ok) done(); else { err.textContent = "Etwas ist schiefgelaufen. Bitte später erneut versuchen."; err.style.display = "block"; } })
-        .catch(function () { err.textContent = "Netzwerkfehler. Bitte später erneut versuchen."; err.style.display = "block"; });
-    } else {
-      done(); // local/dev: no backend wired yet
-    }
+    var email=el("email"), optin=el("optin"), err=el("emailErr");
+    if(!email.value || !email.checkValidity()){ err.textContent="Bitte gib eine gültige E-Mail-Adresse ein."; err.style.display="block"; return; }
+    if(!optin.checked){ err.textContent="Bitte bestätige die Benachrichtigung."; err.style.display="block"; return; }
+    err.style.display="none";
+    function done(){ if(once("em")) track("email_submit",{variant:analyticsVariant, os:OS}); el("form").style.display="none"; el("thanks").style.display="block"; }
+    if(isSet(CFG.formspree.endpoint)){
+      var fd=new FormData(); fd.append("email",email.value); fd.append("variant",analyticsVariant);
+      fd.append("_subject","Carrel launch-notify ("+analyticsVariant+")");
+      fetch(CFG.formspree.endpoint,{method:"POST",body:fd,headers:{Accept:"application/json"}})
+        .then(function(r){ if(r.ok) done(); else { err.textContent="Etwas ist schiefgelaufen. Bitte später erneut versuchen."; err.style.display="block"; } })
+        .catch(function(){ err.textContent="Netzwerkfehler. Bitte später erneut versuchen."; err.style.display="block"; });
+    } else done();
   }
 
-  function initScroll() {
-    function depth() {
-      var h = document.documentElement, sc = h.scrollTop || document.body.scrollTop;
-      var max = h.scrollHeight - h.clientHeight;
-      var p = max > 0 ? (sc / max) * 100 : 100;
-      if (p >= 50 && once("sc50")) track("scroll_50", { variant: analyticsVariant });
-      if (p >= 90 && once("sc90")) track("scroll_90", { variant: analyticsVariant });
+  function initScroll(){
+    function depth(){
+      var h=document.documentElement, sc=h.scrollTop||document.body.scrollTop, max=h.scrollHeight-h.clientHeight;
+      var p=max>0?(sc/max)*100:100;
+      if(p>=50 && once("sc50")) track("scroll_50",{variant:analyticsVariant});
+      if(p>=90 && once("sc90")) track("scroll_90",{variant:analyticsVariant});
     }
-    var t;
-    window.addEventListener("scroll", function () { clearTimeout(t); t = setTimeout(depth, 120); }, { passive: true });
+    var t; window.addEventListener("scroll",function(){ clearTimeout(t); t=setTimeout(depth,120); },{passive:true});
+    setTimeout(depth, 600); // fire once for short pages that never scroll
+  }
+  function initReveal(){
+    if(!("IntersectionObserver" in window)){ Array.prototype.forEach.call(document.querySelectorAll(".reveal-up"),function(x){x.classList.add("in");}); return; }
+    var io=new IntersectionObserver(function(es){ es.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add("in"); io.unobserve(en.target); } }); },{threshold:.15});
+    Array.prototype.forEach.call(document.querySelectorAll(".reveal-up"),function(x){ io.observe(x); });
   }
 
-  function loadPlausible() {
-    if (!isSet(CFG.analytics.plausibleDomain)) return; // no external call until a real domain is set
-    window.plausible = window.plausible || function () { (window.plausible.q = window.plausible.q || []).push(arguments); };
-    var s = document.createElement("script");
-    s.defer = true; s.src = CFG.analytics.plausibleSrc;
-    s.setAttribute("data-domain", CFG.analytics.plausibleDomain);
-    document.head.appendChild(s);
-  }
-
-  /* ---------- boot -------------------------------------------------------- */
-  document.addEventListener("DOMContentLoaded", function () {
+  /* ---- boot ------------------------------------------------------------- */
+  document.addEventListener("DOMContentLoaded", function(){
     loadPlausible();
     render();
-    Array.prototype.forEach.call(document.querySelectorAll("[data-store]"), function (b) {
-      b.addEventListener("click", function (e) { e.preventDefault(); onDownload(b); });
+    document.body.setAttribute("data-variant", analyticsVariant);
+    // bind after render (badges are injected)
+    Array.prototype.forEach.call(document.querySelectorAll("[data-store]"), function(b){
+      b.addEventListener("click", function(e){ e.preventDefault(); onStore(b); });
     });
     el("form").addEventListener("submit", onSubmit);
-    initScroll();
-    // Denominator: one attributed page_view per session.
-    if (once("pv")) track("page_view", { variant: analyticsVariant, os: OS, referrer: document.referrer || "" });
-    document.body.setAttribute("data-variant", analyticsVariant);
+    Array.prototype.forEach.call(document.querySelectorAll("[data-close]"), function(x){ x.addEventListener("click", function(e){ e.preventDefault(); closeModal(); }); });
+    el("modal").addEventListener("click", function(e){ if(e.target===this) closeModal(); });
+    document.addEventListener("keydown", function(e){ if(e.key==="Escape") closeModal(); });
+    // faq accordion
+    Array.prototype.forEach.call(document.querySelectorAll(".qa button"), function(btn){
+      btn.addEventListener("click", function(){
+        var open=btn.getAttribute("aria-expanded")==="true";
+        btn.setAttribute("aria-expanded", open?"false":"true");
+        var a=btn.parentElement.querySelector(".a"); a.style.maxHeight = open?null:a.scrollHeight+"px";
+      });
+    });
+    window.addEventListener("resize", function(){
+      Array.prototype.forEach.call(document.querySelectorAll('.qa button[aria-expanded="true"]'), function(btn){
+        var a=btn.parentElement.querySelector(".a"); if(a) a.style.maxHeight=a.scrollHeight+"px";
+      });
+    });
+    el("modal").addEventListener("keydown", function(e){
+      if(e.key!=="Tab") return;
+      var f=Array.prototype.filter.call(this.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])'), function(x){ return x.offsetParent!==null; });
+      if(!f.length) return; var first=f[0], last=f[f.length-1];
+      if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+      else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+    });
+    initScroll(); initReveal();
+    if(once("pv")) track("page_view", {variant:analyticsVariant, os:OS, referrer:document.referrer||""});
   });
 })();
