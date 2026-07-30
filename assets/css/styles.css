@@ -71,7 +71,10 @@ section{position:relative}
 .everylib img{width:34px;height:34px;flex:0 0 34px}
 .owl{position:absolute;right:5%;bottom:9%;width:116px;z-index:2;animation:bob 3.6s ease-in-out infinite;filter:drop-shadow(0 8px 16px rgba(0,0,0,.6))}
 @keyframes bob{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-9px) rotate(2deg)}}
-@media(max-width:640px){.owl{width:66px;right:0;bottom:auto;top:63px}}
+@media(max-width:640px){
+  .hero-inner{padding-top:104px}
+  .owl{width:64px;right:16px;left:auto;bottom:auto;top:18px}
+}
 
 /* ---------- section shell ---------- */
 .sec{padding:56px 0}

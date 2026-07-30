@@ -35,6 +35,31 @@
       if (name === "page_view") window.plausible("pageview", {props:pp});
       else window.plausible(name, {props:pp});
     }
+    // GoatCounter (free, cookieless): encode the funnel step + variant into the path.
+    gcTrack(name, props || {});
+  }
+  function gcSend(o){
+    (window.__gc = window.__gc || []).push(o);
+    if (window.goatcounter && typeof window.goatcounter.count === "function") window.goatcounter.count(o);
+    else (window.__gcq = window.__gcq || []).push(o);
+  }
+  function gcTrack(name, props){
+    var v = analyticsVariant, o = null;
+    if (name === "page_view") o = {path:"/scan/"+v, title:"Scan "+v};                 // pageview = the denominator
+    else if (name === "download_tap") o = {path:"/download/"+props.button+"/"+v, title:"Download "+props.button+" ("+v+")", event:true};
+    else if (name === "email_submit") o = {path:"/email/"+v, title:"E-Mail ("+v+")", event:true};
+    else if (name === "scroll_50" || name === "scroll_90") o = {path:"/"+name.replace("_","-")+"/"+v, title:name+" "+v, event:true};
+    if (o) gcSend(o);
+  }
+  function gcFlushLoop(){
+    var t = setInterval(function(){
+      if (window.goatcounter && typeof window.goatcounter.count === "function"){
+        var q = window.__gcq || []; window.__gcq = [];
+        q.forEach(function(o){ window.goatcounter.count(o); });
+        clearInterval(t);
+      }
+    }, 300);
+    setTimeout(function(){ clearInterval(t); }, 10000);
   }
   function loadPlausible(){
     if(!isSet(CFG.analytics.plausibleDomain)) return;
@@ -191,6 +216,7 @@
   /* ---- boot ------------------------------------------------------------- */
   document.addEventListener("DOMContentLoaded", function(){
     loadPlausible();
+    gcFlushLoop();
     render();
     document.body.setAttribute("data-variant", analyticsVariant);
     // bind after render (badges are injected)

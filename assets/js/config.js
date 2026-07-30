@@ -6,8 +6,10 @@ window.CARREL_CONFIG = {
   launchMonth: "Oktober 2026",
 
   // --- integrations (auto-activate when no longer 'REPLACE') --------------
+  // Analytics = GoatCounter (free, cookieless), wired via the <script> in index.html.
+  // Plausible is OFF (placeholder domain); put a real domain here to also enable it.
   analytics: {
-    plausibleDomain: "atlanticore09.github.io",
+    plausibleDomain: "REPLACE.plausible-domain",
     plausibleSrc: "https://plausible.io/js/script.manual.js"
   },
   formspree: { endpoint: "https://formspree.io/f/mojgzqbz" },
