@@ -62,17 +62,11 @@
   }
 
   /* ---- store badges (official-style, both platforms) -------------------- */
-  var APPLE='<svg class="glyph" viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M17.05 12.5c-.02-2 1.63-2.96 1.7-3-.93-1.36-2.38-1.55-2.9-1.57-1.23-.12-2.4.72-3.03.72-.62 0-1.58-.7-2.6-.68-1.34.02-2.57.78-3.26 1.98-1.39 2.41-.36 5.98 1 7.94.66.96 1.45 2.03 2.48 1.99 1-.04 1.37-.64 2.58-.64 1.2 0 1.54.64 2.6.62 1.07-.02 1.75-.98 2.4-1.94.76-1.11 1.07-2.18 1.09-2.24-.02-.01-2.09-.8-2.11-3.18zM15.1 6.9c.55-.66.92-1.59.82-2.5-.79.03-1.75.53-2.32 1.19-.51.58-.96 1.51-.84 2.4.88.07 1.79-.44 2.34-1.09z"/></svg>';
-  var PLAY='<svg class="glyph" viewBox="0 0 22 24" aria-hidden="true">'
-    +'<path fill="#EA4335" d="M2.7 1.4 13.9 8 11.4 10.5 2.7 1.4z"/>'
-    +'<path fill="#4285F4" d="M2.4 1.6C2.2 1.8 2.1 2.1 2.1 2.6v18.8c0 .5.1.8.3 1L12 12 2.4 1.6z"/>'
-    +'<path fill="#34A853" d="M2.7 22.6 11.4 13.5 13.9 16 2.7 22.6z"/>'
-    +'<path fill="#FBBC04" d="M13.9 8 18.9 10.9c1 .6 1 1.6 0 2.2L13.9 16 11.1 12 13.9 8z"/></svg>';
   function badgesHTML(){
-    return '<button class="badge" data-store="ios" type="button" aria-label="Im App Store laden">'+APPLE
-      +'<span class="txt"><small>Laden im</small><b>App&nbsp;Store</b></span></button>'
-      +'<button class="badge" data-store="android" type="button" aria-label="Bei Google Play">'+PLAY
-      +'<span class="txt"><small>Jetzt bei</small><b>Google&nbsp;Play</b></span></button>';
+    return '<button class="badge" data-store="ios" type="button" aria-label="Im App Store laden">'
+      +'<img src="assets/img/app-store-badge.svg" alt="Im App Store laden"></button>'
+      +'<button class="badge" data-store="android" type="button" aria-label="Bei Google Play">'
+      +'<img src="assets/img/google-play-badge.svg" alt="Jetzt bei Google Play"></button>';
   }
 
   function el(id){ return document.getElementById(id); }
@@ -127,6 +121,7 @@
     set("revealBody", S.reveal.body);
     el("m-owl").src="assets/img/owl-anim.png";
     el("email").placeholder=S.emailPlaceholder;
+    if(isSet(CFG.formspree.endpoint)){ el("form").setAttribute("action",CFG.formspree.endpoint); el("form").setAttribute("method","POST"); }
     set("optinLabel", S.optin);
     set("emailBtn", S.emailButton);
     set("thanks", S.thanks);
